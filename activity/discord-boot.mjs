@@ -18,6 +18,7 @@ export const MAPPINGS = [
   { prefix: "/capas", target: "image.tmdb.org" },
   { prefix: "/omdb", target: "www.omdbapi.com" },
   { prefix: "/legendas", target: "rest.opensubtitles.org" },
+  { prefix: "/legenda-dl", target: "dl.opensubtitles.org" },
   { prefix: "/tmdb", target: "api.themoviedb.org" },
   { prefix: "/itunes", target: "itunes.apple.com" },
   { prefix: "/jikan", target: "api.jikan.moe" },
@@ -145,7 +146,9 @@ if (dentroDoDiscord()) {
       `:root{--filminho-topo:var(--discord-safe-area-inset-top,env(safe-area-inset-top,0px))}` +
       `html,body{overflow:hidden!important}` +
       `#root{padding-top:var(--filminho-topo);box-sizing:border-box}` +
-      `#root>*{height:calc(100dvh - var(--filminho-topo))!important;min-height:calc(100dvh - var(--filminho-topo))!important}`;
+      `#root>*{height:calc(100dvh - var(--filminho-topo))!important;min-height:calc(100dvh - var(--filminho-topo))!important}` +
+      // deitado: o app usa a largura toda (o player ocupa a tela sem faixas)
+      `@media (orientation:landscape){[class*="max-w-[480px]"],[class*="max-w-[456px]"]{max-width:none!important}}`;
     (document.head || document.documentElement).appendChild(st);
 
     // Android/Webview: ao voltar do fundo (app flutuando, troca de app) as
