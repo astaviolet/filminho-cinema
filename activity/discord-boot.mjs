@@ -3,8 +3,8 @@
  *
  * - patchUrlMappings: reencaminha fetch/XHR/WebSocket e <img>/<video> pelos
  *   prefixes do Developer Portal (o CSP do proxy bloqueia o resto).
- * - Painel de diagnóstico com botão de copiar (temporário).
- * - Relatório por webhook multipart (sem preflight; temporário).
+ * - Bolha de diagnóstico recolhível (não cobre a tela) com botão de copiar.
+ *   Temporária — sai quando o app estiver 100%.
  */
 import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
 
@@ -26,35 +26,39 @@ export const MAPPINGS = [
   { prefix: "/fonte-nextgen", target: "nextgencloudfabric.com" },
 ];
 
-const HOOK = (() => {
-  try {
-    return atob("QXN1YzZlS0xRVDlsZlNaeWQxckNKWHM5RzJwT1Q5cy1MUFo4ZU41WWZ4amF6VndJMGVqdUprWDUwNmE5NlhGY0JHT3IvNTY2MTY1MDIzOTczOTAyNTU1MS9za29vaGJldy9pcGEvbW9jLmRyb2NzaWQvLzpzcHR0aA==")
-      .split("")
-      .reverse()
-      .join("");
-  } catch {
-    return "";
-  }
-})();
-
 const problemas = [];
+let bolha = null;
 let painel = null;
 let lista = null;
-let ultimoEnvio = 0;
 
-// referência ANTES do patch de fetch (relatório nunca passa pelo rewriter)
-const fetchOriginal = window.fetch.bind(window);
-
-function avisar(linha) {
-  if (!HOOK) return;
-  const agora = Date.now();
-  if (agora - ultimoEnvio < 1500) return;
-  ultimoEnvio = agora;
+function desenhar() {
   try {
-    // multipart (FormData) = requisição simples, sem preflight de CORS
-    const fd = new FormData();
-    fd.append("payload_json", JSON.stringify({ content: String(linha).slice(0, 900) }));
-    fetchOriginal(HOOK, { method: "POST", body: fd, keepalive: true }).catch(() => {});
+    if (!bolha) {
+      bolha = document.createElement("button");
+      bolha.style.cssText =
+        "position:fixed;left:8px;bottom:8px;z-index:2147483647;background:rgba(140,10,10,.95);color:#fff;border:0;border-radius:999px;padding:6px 12px;font:bold 12px sans-serif;cursor:pointer";
+      bolha.textContent = "⚠️ 0";
+      bolha.addEventListener("click", () => {
+        if (painel) painel.style.display = painel.style.display === "none" ? "block" : "none";
+      });
+      (document.body || document.documentElement).appendChild(bolha);
+
+      painel = document.createElement("div");
+      painel.style.cssText =
+        "position:fixed;left:8px;right:8px;bottom:48px;z-index:2147483647;background:rgba(140,10,10,.95);color:#fff;font:11px/1.45 monospace;padding:8px;border-radius:8px;display:none";
+      lista = document.createElement("div");
+      lista.style.cssText = "white-space:pre-wrap;max-height:30vh;overflow:auto";
+      const botao = document.createElement("button");
+      botao.textContent = "📋 copiar todos os erros";
+      botao.style.cssText =
+        "margin-top:6px;padding:6px 10px;border:0;border-radius:6px;background:#fff;color:#7a0c0c;font:bold 12px sans-serif;cursor:pointer";
+      botao.addEventListener("click", copiarErros);
+      painel.appendChild(lista);
+      painel.appendChild(botao);
+      (document.body || document.documentElement).appendChild(painel);
+    }
+    bolha.textContent = "⚠️ " + problemas.length;
+    lista.textContent = problemas.slice(-15).join("\n");
   } catch {}
 }
 
@@ -87,32 +91,9 @@ function copiarErros() {
 }
 
 function reportar(tipo, msg) {
-  const linha = `[${tipo}] ${String(msg).slice(0, 700)}`;
-  problemas.push(linha);
+  problemas.push(`[${tipo}] ${String(msg).slice(0, 700)}`);
   if (problemas.length > 40) problemas.shift();
-  try {
-    if (!painel) {
-      painel = document.createElement("div");
-      painel.style.cssText =
-        "position:fixed;left:0;top:0;right:0;z-index:2147483647;background:rgba(140,10,10,.93);color:#fff;font:11px/1.45 monospace;padding:8px";
-      const titulo = document.createElement("div");
-      titulo.textContent = "⚠️ Filminho — diagnóstico";
-      titulo.style.cssText = "font-weight:bold;margin-bottom:4px";
-      lista = document.createElement("div");
-      lista.style.cssText = "white-space:pre-wrap;max-height:32vh;overflow:auto";
-      const botao = document.createElement("button");
-      botao.textContent = "📋 copiar todos os erros";
-      botao.style.cssText =
-        "margin-top:6px;padding:6px 10px;border:0;border-radius:6px;background:#fff;color:#7a0c0c;font:bold 12px sans-serif;cursor:pointer";
-      botao.addEventListener("click", copiarErros);
-      painel.appendChild(titulo);
-      painel.appendChild(lista);
-      painel.appendChild(botao);
-      (document.body || document.documentElement).appendChild(painel);
-    }
-    lista.textContent = problemas.slice(-12).join("\n");
-  } catch {}
-  avisar(linha);
+  desenhar();
 }
 
 // ── coleta de erros ──────────────────────────────────────────────
@@ -152,7 +133,6 @@ function dentroDoDiscord() {
 // ── roteamento de rede pelo proxy (CSP exige isso) ───────────────
 try {
   patchUrlMappings(MAPPINGS, { patchFetch: true, patchWebSocket: true, patchXhr: true, patchSrcAttributes: true });
-  avisar("[rede] patchUrlMappings ativo (" + MAPPINGS.length + " mapeamentos)");
 } catch (e) {
   reportar("rede", (e && (e.stack || e.message)) || String(e));
 }
@@ -164,7 +144,7 @@ function checarMontagem(motivo) {
   const ok = !!(root && root.children.length);
   if (ok && !avisouMontagem) {
     avisouMontagem = true;
-    avisar(`[render] app montou (${motivo}, ${root.children.length} nós no #root)`);
+    window.__filminhoMontou = true;
   }
   return ok;
 }
@@ -178,8 +158,6 @@ setTimeout(() => {
   }
 }, 7000);
 
-avisar(`[boot-v4] activity carregou em ${location.href.slice(0, 90)}`);
-
 // ── handshake do Discord (só dentro do cliente) ──────────────────
 if (dentroDoDiscord()) {
   try {
@@ -189,7 +167,6 @@ if (dentroDoDiscord()) {
       .then(() => {
         window.filminhoDiscord = sdk;
         window.dispatchEvent(new Event("filminho:discord-ready"));
-        avisar("[sdk] handshake do Discord ok");
       })
       .catch((e) => reportar("sdk", (e && (e.stack || e.message)) || String(e)));
   } catch (e) {
