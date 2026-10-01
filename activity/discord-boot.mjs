@@ -1,13 +1,10 @@
 /**
  * Filminho Cinema — boot do Discord + roteador de rede + diagnóstico.
  *
- * O proxy do Discord injeta um CSP que só permite requisições para o próprio
- * proxy (e domínios do Discord). Usamos o patchUrlMappings do SDK oficial para
- * reencaminhar fetch/XHR/WebSocket e elementos <img>/<video> pelos prefixes
- * configurados no Developer Portal (Activities > URL Mappings).
- *
- * Também: handshake do SDK, painel de diagnóstico e relato a um webhook
- * temporário (removido depois do ajuste).
+ * - patchUrlMappings: reencaminha fetch/XHR/WebSocket e <img>/<video> pelos
+ *   prefixes do Developer Portal (o CSP do proxy bloqueia o resto).
+ * - Painel de diagnóstico com botão de copiar (temporário).
+ * - Relatório por webhook multipart (sem preflight; temporário).
  */
 import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
 
@@ -42,6 +39,7 @@ const HOOK = (() => {
 
 const problemas = [];
 let painel = null;
+let lista = null;
 let ultimoEnvio = 0;
 
 // referência ANTES do patch de fetch (relatório nunca passa pelo rewriter)
@@ -53,27 +51,66 @@ function avisar(linha) {
   if (agora - ultimoEnvio < 1500) return;
   ultimoEnvio = agora;
   try {
-    fetchOriginal(HOOK, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content: String(linha).slice(0, 900) }),
-      keepalive: true,
-    }).catch(() => {});
+    // multipart (FormData) = requisição simples, sem preflight de CORS
+    const fd = new FormData();
+    fd.append("payload_json", JSON.stringify({ content: String(linha).slice(0, 900) }));
+    fetchOriginal(HOOK, { method: "POST", body: fd, keepalive: true }).catch(() => {});
   } catch {}
+}
+
+function copiarErros() {
+  const texto = "⚠️ Filminho — diagnóstico\n" + problemas.join("\n");
+  const ok = () => {
+    const b = painel && painel.querySelector("button");
+    if (b) {
+      b.textContent = "✅ copiado!";
+      setTimeout(() => (b.textContent = "📋 copiar todos os erros"), 1500);
+    }
+  };
+  const fallback = () => {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = texto;
+      ta.style.cssText = "position:fixed;left:-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      ok();
+    } catch {}
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(ok).catch(fallback);
+  } else {
+    fallback();
+  }
 }
 
 function reportar(tipo, msg) {
   const linha = `[${tipo}] ${String(msg).slice(0, 700)}`;
   problemas.push(linha);
-  if (problemas.length > 15) problemas.shift();
+  if (problemas.length > 40) problemas.shift();
   try {
     if (!painel) {
       painel = document.createElement("div");
       painel.style.cssText =
-        "position:fixed;left:0;top:0;right:0;z-index:2147483647;background:rgba(140,10,10,.93);color:#fff;font:11px/1.45 monospace;padding:8px;white-space:pre-wrap;max-height:45vh;overflow:auto";
+        "position:fixed;left:0;top:0;right:0;z-index:2147483647;background:rgba(140,10,10,.93);color:#fff;font:11px/1.45 monospace;padding:8px";
+      const titulo = document.createElement("div");
+      titulo.textContent = "⚠️ Filminho — diagnóstico";
+      titulo.style.cssText = "font-weight:bold;margin-bottom:4px";
+      lista = document.createElement("div");
+      lista.style.cssText = "white-space:pre-wrap;max-height:32vh;overflow:auto";
+      const botao = document.createElement("button");
+      botao.textContent = "📋 copiar todos os erros";
+      botao.style.cssText =
+        "margin-top:6px;padding:6px 10px;border:0;border-radius:6px;background:#fff;color:#7a0c0c;font:bold 12px sans-serif;cursor:pointer";
+      botao.addEventListener("click", copiarErros);
+      painel.appendChild(titulo);
+      painel.appendChild(lista);
+      painel.appendChild(botao);
       (document.body || document.documentElement).appendChild(painel);
     }
-    painel.textContent = "⚠️ Filminho — diagnóstico\n" + problemas.slice(-10).join("\n");
+    lista.textContent = problemas.slice(-12).join("\n");
   } catch {}
   avisar(linha);
 }
@@ -141,7 +178,7 @@ setTimeout(() => {
   }
 }, 7000);
 
-avisar(`[boot-v3] activity carregou em ${location.href.slice(0, 90)}`);
+avisar(`[boot-v4] activity carregou em ${location.href.slice(0, 90)}`);
 
 // ── handshake do Discord (só dentro do cliente) ──────────────────
 if (dentroDoDiscord()) {
