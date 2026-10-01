@@ -11,6 +11,7 @@ npm run build:capacitor -- --base=./ 2>&1 | tail -1
 cd dist
 rm -f filminho.apk filminho-kotlin.apk
 mv capacitor-index.html index.html
+rm -f boot-*.js preloads.js
 
 echo "== 2) fontes locais (CSP do Discord bloqueia Google Fonts) =="
 python3 - <<'PYEOF'
@@ -34,27 +35,46 @@ open("index.html", "w").write(html)
 print("fontes locais ok")
 PYEOF
 
-echo "== 3) boot-v3 (roteador CSP + diagnóstico + SDK) =="
-cd "$BASE"
-npx esbuild activity/discord-boot.mjs --bundle --format=esm --minify --outfile="$APP/dist/boot-v3.js" 2>&1 | tail -1
-test -s "$APP/dist/boot-v3.js"
-
-echo "== 4) injeta boot ANTES do app =="
+echo "== 3) preloads dos chunks (transição de abas sem latência) =="
 python3 - <<'PYEOF'
+import os, json, pathlib
+assets = sorted(p.name for p in pathlib.Path("assets").glob("*.js"))
+urls = [f"./assets/{a}" for a in assets]
+open("preloads.js", "w").write(
+    "try{(" + (lambda: None).__class__.__name__ + ")&&0}catch(e){};"
+    if False else
+    "(function(){try{var l=%s;window.__FILMINHO_PRELOADS=l;"
+    "(window.requestIdleCallback||function(f){setTimeout(f,200);})(function(){l.forEach(function(u){var e=document.createElement('link');"
+    "e.rel='modulepreload';e.href=u;document.head.appendChild(e);});});}catch(e){}})();"
+    % json.dumps(urls)
+)
+print("chunks:", len(urls))
+PYEOF
+
+echo "== 4) boot (versão nova a cada build — cache impossível) =="
+cd "$BASE"
+npx esbuild activity/discord-boot.mjs --bundle --format=esm --minify --outfile=/tmp/boot.js 2>&1 | tail -1
+VER=$(sha1sum /tmp/boot.js | cut -c1-8)
+BOOT="boot-$VER.js"
+cp /tmp/boot.js "$APP/dist/$BOOT"
+
+echo "== 5) injeta boot + preloads ANTES do app =="
+BOOT="$BOOT" APP="$APP" python3 - <<'PYEOF'
 import os
 p = os.path.join(os.environ["APP"], "dist", "index.html")
 h = open(p).read()
-tag = '<script type="module" src="./boot-v3.js"></script>'
-if tag not in h:
-    alvo = '<script type="module" crossorigin src="./assets/'
-    h = h.replace(alvo, tag + "\n    " + alvo, 1)
+boot = os.environ["BOOT"]
+tags = f'<script src="./preloads.js"></script>\n    <script type="module" src="./{boot}"></script>'
+alvo = '<script type="module" crossorigin src="./assets/'
+if boot not in h:
+    h = h.replace(alvo, tags + "\n    " + alvo, 1)
 open(p, "w").write(h)
-print("boot injetado antes do app:", tag in h and h.index(tag) < h.index(alvo))
+print("injetado:", boot, "| antes do app:", h.index(boot) < h.index(alvo))
 PYEOF
 
-echo "== 5) empacota + cifra =="
+echo "== 6) empacota + cifra =="
 PUB=$(cat "$BASE/age-public-key.txt")
 tar -czf /tmp/filminho-ui.tar.gz -C "$APP/dist" .
 age -r "$PUB" -o "$BASE/filminho-ui.tar.gz.age" /tmp/filminho-ui.tar.gz
 ls -la "$BASE/filminho-ui.tar.gz.age"
-echo "montado! Agora: git add/commit/push em $BASE"
+echo "montado! (boot: $BOOT) Agora: git add/commit/push em $BASE"

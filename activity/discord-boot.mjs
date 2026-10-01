@@ -125,6 +125,7 @@ for (const m of ["error", "warn"]) {
   };
 }
 
+// ── ambiente da Activity: correções visuais SÓ aqui (APK/site intocáveis) ──
 function dentroDoDiscord() {
   try {
     const p = new URLSearchParams(location.search);
@@ -132,6 +133,24 @@ function dentroDoDiscord() {
   } catch {
     return false;
   }
+}
+
+if (dentroDoDiscord()) {
+  try {
+    const estreito = window.innerWidth < 700;
+    const topo = estreito ? 52 : 0; // barra do Discord (mobile) fica por cima do app
+    const st = document.createElement("style");
+    st.textContent =
+      `#root{padding-top:${topo}px}` +
+      `.screen-enter{will-change:transform;contain:paint}` +
+      `.bottom-nav-pill{will-change:transform}`;
+    (document.head || document.documentElement).appendChild(st);
+    const reduzido = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    problemas.push(
+      `[ambiente] motion-reduce=${reduzido} largura=${window.innerWidth} topo=${topo}px plataforma=${(location.search.match(/platform=([^&]+)/) || [])[1] || "?"}`
+    );
+    desenhar();
+  } catch {}
 }
 
 // ── roteamento de rede pelo proxy (CSP exige isso) ───────────────
