@@ -153,6 +153,24 @@ if (dentroDoDiscord()) {
   } catch {}
 }
 
+// ── fontes inalcançáveis pelo proxy (jikan/tvmaze dão 520/504): respostas
+// vazias sintéticas — a busca segue com tmdb/itunes/omdb sem erro de console ──
+try {
+  const fetchMapeado = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    try {
+      const u = String(input && input.url ? input.url : input);
+      if (u.includes("api.jikan.moe") || u.includes("/jikan/")) {
+        return Promise.resolve(new Response('{"data":[]}', { status: 200, headers: { "content-type": "application/json" } }));
+      }
+      if (u.includes("api.tvmaze.com") || u.includes("/tvmaze/")) {
+        return Promise.resolve(new Response("[]", { status: 200, headers: { "content-type": "application/json" } }));
+      }
+    } catch {}
+    return fetchMapeado(input, init);
+  };
+} catch {}
+
 // ── roteamento de rede pelo proxy (CSP exige isso) ───────────────
 try {
   patchUrlMappings(MAPPINGS, { patchFetch: true, patchWebSocket: true, patchXhr: true, patchSrcAttributes: true });
