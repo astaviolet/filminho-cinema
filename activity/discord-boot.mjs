@@ -140,12 +140,12 @@ function dentroDoDiscord() {
 if (dentroDoDiscord()) {
   try {
     const estreito = window.innerWidth < 700;
-    const topo = estreito ? 52 : 0; // barra do Discord (mobile) fica por cima do app
     const st = document.createElement("style");
     st.textContent =
+      `:root{--filminho-topo:var(--discord-safe-area-inset-top,env(safe-area-inset-top,0px))}` +
       `html,body{overflow:hidden!important}` +
-      `#root{padding-top:${topo}px;box-sizing:border-box}` +
-      `#root>*{height:calc(100dvh - ${topo}px)!important;min-height:calc(100dvh - ${topo}px)!important}`;
+      `#root{padding-top:var(--filminho-topo);box-sizing:border-box}` +
+      `#root>*{height:calc(100dvh - var(--filminho-topo))!important;min-height:calc(100dvh - var(--filminho-topo))!important}`;
     (document.head || document.documentElement).appendChild(st);
 
     // Android/Webview: ao voltar do fundo (app flutuando, troca de app) as
@@ -168,7 +168,8 @@ if (dentroDoDiscord()) {
     });
 
     const reduzido = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    infoAmbiente = `[ambiente] motion-reduce=${reduzido} largura=${window.innerWidth} topo=${topo}px plataforma=${(location.search.match(/platform=([^&]+)/) || [])[1] || "?"}`;
+    const topoUsado = (window.getComputedStyle(document.documentElement).getPropertyValue("--filminho-topo") || "auto").trim() || "auto";
+    infoAmbiente = `[ambiente] motion-reduce=${reduzido} largura=${window.innerWidth} safe-area-top=${topoUsado} plataforma=${(location.search.match(/platform=([^&]+)/) || [])[1] || "?"}`;
   } catch {}
 }
 
