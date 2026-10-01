@@ -53,7 +53,7 @@ function avisar(linha) {
     fetch(HOOK, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content: ("```\n" + linha.slice(0, 900) + "\n```").replace(/```/g, "'''") }),
+      body: JSON.stringify({ content: String(linha).slice(0, 900) }),
     }).catch(() => {});
   } catch {}
 }
