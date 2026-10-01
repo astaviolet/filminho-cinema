@@ -3,8 +3,9 @@
  *
  * - patchUrlMappings: reencaminha fetch/XHR/WebSocket e <img>/<video> pelos
  *   prefixes do Developer Portal (o CSP do proxy bloqueia o resto).
- * - Bolha de diagnóstico recolhível (não cobre a tela) com botão de copiar.
- *   Temporária — sai quando o app estiver 100%.
+ * - Correções visuais SÓ da Activity (APK/site intocáveis): offset da barra do
+ *   Discord, reparo de tela ao voltar do fundo.
+ * - Bolha de diagnóstico: só aparece quando existe erro de verdade.
  */
 import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
 
@@ -31,17 +32,18 @@ export const MAPPINGS = [
 ];
 
 const problemas = [];
+let infoAmbiente = "";
 let bolha = null;
 let painel = null;
 let lista = null;
 
 function desenhar() {
   try {
+    if (problemas.length === 0) return; // sem erros: nada na tela (igual ao APK)
     if (!bolha) {
       bolha = document.createElement("button");
       bolha.style.cssText =
         "position:fixed;left:8px;bottom:8px;z-index:2147483647;background:rgba(140,10,10,.95);color:#fff;border:0;border-radius:999px;padding:6px 12px;font:bold 12px sans-serif;cursor:pointer";
-      bolha.textContent = "⚠️ 0";
       bolha.addEventListener("click", () => {
         if (painel) painel.style.display = painel.style.display === "none" ? "block" : "none";
       });
@@ -67,7 +69,7 @@ function desenhar() {
 }
 
 function copiarErros() {
-  const texto = "⚠️ Filminho — diagnóstico\n" + problemas.join("\n");
+  const texto = "⚠️ Filminho — diagnóstico\n" + infoAmbiente + "\n" + problemas.join("\n");
   const ok = () => {
     const b = painel && painel.querySelector("button");
     if (b) {
@@ -125,7 +127,6 @@ for (const m of ["error", "warn"]) {
   };
 }
 
-// ── ambiente da Activity: correções visuais SÓ aqui (APK/site intocáveis) ──
 function dentroDoDiscord() {
   try {
     const p = new URLSearchParams(location.search);
@@ -135,12 +136,16 @@ function dentroDoDiscord() {
   }
 }
 
+// ── ambiente da Activity: correções visuais SÓ aqui (APK/site intocáveis) ──
 if (dentroDoDiscord()) {
   try {
     const estreito = window.innerWidth < 700;
     const topo = estreito ? 52 : 0; // barra do Discord (mobile) fica por cima do app
     const st = document.createElement("style");
-    st.textContent = `#root{padding-top:${topo}px}`;
+    st.textContent =
+      `html,body{overflow:hidden!important}` +
+      `#root{padding-top:${topo}px;box-sizing:border-box}` +
+      `#root>*{height:calc(100dvh - ${topo}px)!important;min-height:calc(100dvh - ${topo}px)!important}`;
     (document.head || document.documentElement).appendChild(st);
 
     // Android/Webview: ao voltar do fundo (app flutuando, troca de app) as
@@ -163,10 +168,7 @@ if (dentroDoDiscord()) {
     });
 
     const reduzido = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    problemas.push(
-      `[ambiente] motion-reduce=${reduzido} largura=${window.innerWidth} topo=${topo}px plataforma=${(location.search.match(/platform=([^&]+)/) || [])[1] || "?"}`
-    );
-    desenhar();
+    infoAmbiente = `[ambiente] motion-reduce=${reduzido} largura=${window.innerWidth} topo=${topo}px plataforma=${(location.search.match(/platform=([^&]+)/) || [])[1] || "?"}`;
   } catch {}
 }
 
@@ -197,7 +199,7 @@ try {
 
 // ── o app montou de verdade? ─────────────────────────────────────
 let avisouMontagem = false;
-function checarMontagem(motivo) {
+function checarMontagem() {
   const root = document.getElementById("root");
   const ok = !!(root && root.children.length);
   if (ok && !avisouMontagem) {
@@ -206,12 +208,12 @@ function checarMontagem(motivo) {
   }
   return ok;
 }
-new MutationObserver(() => checarMontagem("observer")).observe(document.documentElement, {
+new MutationObserver(() => checarMontagem()).observe(document.documentElement, {
   childList: true,
   subtree: true,
 });
 setTimeout(() => {
-  if (!checarMontagem("7s")) {
+  if (!checarMontagem()) {
     reportar("render", "#root vazio após 7s — o app do Filminho não montou");
   }
 }, 7000);
