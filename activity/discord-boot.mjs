@@ -1,13 +1,34 @@
 /**
- * Filminho Cinema — boot do Discord Embedded App SDK + diagnóstico.
- * Roda por baixo da UI do Filminho (idêntica ao app/APK).
- * - Handshake do SDK quando aberto dentro do Discord.
- * - Coleta erros (window/console) e mostra um painel na tela se algo quebrar.
- * - Avisa um webhook temporário de diagnóstico (removido depois do ajuste).
+ * Filminho Cinema — boot do Discord + roteador de rede + diagnóstico.
+ *
+ * O proxy do Discord injeta um CSP que só permite requisições para o próprio
+ * proxy (e domínios do Discord). Usamos o patchUrlMappings do SDK oficial para
+ * reencaminhar fetch/XHR/WebSocket e elementos <img>/<video> pelos prefixes
+ * configurados no Developer Portal (Activities > URL Mappings).
+ *
+ * Também: handshake do SDK, painel de diagnóstico e relato a um webhook
+ * temporário (removido depois do ajuste).
  */
-import { DiscordSDK } from "@discord/embedded-app-sdk";
+import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
 
 const APP_ID = "1555189969545461850";
+
+// prefix -> target (precisa espelhar as linhas em Activities > URL Mappings)
+export const MAPPINGS = [
+  { prefix: "/supabase", target: "dnafsqxiujgnjljftxor.supabase.co" },
+  { prefix: "/filmes-api", target: "movies-api.accel.li" },
+  { prefix: "/capas", target: "image.tmdb.org" },
+  { prefix: "/omdb", target: "www.omdbapi.com" },
+  { prefix: "/legendas", target: "rest.opensubtitles.org" },
+  { prefix: "/fonte-vidlink", target: "vidlink.pro" },
+  { prefix: "/fonte-vixsrc", target: "vixsrc.to" },
+  { prefix: "/fonte-vaplayer", target: "streamdata.vaplayer.ru" },
+  { prefix: "/fonte-yts", target: "yts.lt" },
+  { prefix: "/fonte-yts2", target: "yts.ag" },
+  { prefix: "/fonte-archive", target: "archive.org" },
+  { prefix: "/fonte-nextgen", target: "nextgencloudfabric.com" },
+];
+
 const HOOK = (() => {
   try {
     return atob("QXN1YzZlS0xRVDlsZlNaeWQxckNKWHM5RzJwT1Q5cy1MUFo4ZU41WWZ4amF6VndJMGVqdUprWDUwNmE5NlhGY0JHT3IvNTY2MTY1MDIzOTczOTAyNTU1MS9za29vaGJldy9pcGEvbW9jLmRyb2NzaWQvLzpzcHR0aA==")
@@ -78,6 +99,23 @@ for (const m of ["error", "warn"]) {
   };
 }
 
+function dentroDoDiscord() {
+  try {
+    const p = new URLSearchParams(location.search);
+    return p.has("frame_id") || p.has("instance_id");
+  } catch {
+    return false;
+  }
+}
+
+// ── roteamento de rede pelo proxy (CSP exige isso) ───────────────
+try {
+  patchUrlMappings(MAPPINGS, { patchFetch: true, patchWebSocket: true, patchXhr: true, patchSrcAttributes: true });
+  avisar("[rede] patchUrlMappings ativo (" + MAPPINGS.length + " mapeamentos)");
+} catch (e) {
+  reportar("rede", (e && (e.stack || e.message)) || String(e));
+}
+
 // ── o app montou de verdade? ─────────────────────────────────────
 let avisouMontagem = false;
 function checarMontagem(motivo) {
@@ -99,18 +137,9 @@ setTimeout(() => {
   }
 }, 7000);
 
-avisar(`[boot] activity carregou em ${location.href.slice(0, 90)}`);
+avisar(`[boot-v3] activity carregou em ${location.href.slice(0, 90)}`);
 
 // ── handshake do Discord (só dentro do cliente) ──────────────────
-function dentroDoDiscord() {
-  try {
-    const p = new URLSearchParams(location.search);
-    return p.has("frame_id") || p.has("instance_id");
-  } catch {
-    return false;
-  }
-}
-
 if (dentroDoDiscord()) {
   try {
     const sdk = new DiscordSDK(APP_ID);
