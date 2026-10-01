@@ -44,16 +44,20 @@ const problemas = [];
 let painel = null;
 let ultimoEnvio = 0;
 
+// referência ANTES do patch de fetch (relatório nunca passa pelo rewriter)
+const fetchOriginal = window.fetch.bind(window);
+
 function avisar(linha) {
   if (!HOOK) return;
   const agora = Date.now();
   if (agora - ultimoEnvio < 1500) return;
   ultimoEnvio = agora;
   try {
-    fetch(HOOK, {
+    fetchOriginal(HOOK, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ content: String(linha).slice(0, 900) }),
+      keepalive: true,
     }).catch(() => {});
   } catch {}
 }
