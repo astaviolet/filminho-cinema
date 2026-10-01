@@ -19,6 +19,7 @@ export const MAPPINGS = [
   { prefix: "/omdb", target: "www.omdbapi.com" },
   { prefix: "/legendas", target: "rest.opensubtitles.org" },
   { prefix: "/legenda-dl", target: "dl.opensubtitles.org" },
+  { prefix: "/legenda-api", target: "api.opensubtitles.org" },
   { prefix: "/tmdb", target: "api.themoviedb.org" },
   { prefix: "/itunes", target: "itunes.apple.com" },
   { prefix: "/jikan", target: "api.jikan.moe" },
@@ -245,6 +246,37 @@ try {
       }
       if (u.includes("dl.opensubtitles.org") || u.includes("/legenda-dl/")) {
         return (async () => {
+          // caminho oficial: API XML-RPC (o download direto é bloqueado por anti-bot
+          // para o IP do proxy do Discord; a API antiga devolve o .gz dentro da resposta)
+          try {
+            const m = /\/(?:file|sub)\/(\d+)/.exec(u);
+            if (m) {
+              const id = m[1];
+              const rpc = (corpo) =>
+                fetchOriginal("/legenda-api/xml-rpc", {
+                  method: "POST",
+                  headers: { "content-type": "text/xml" },
+                  body: corpo,
+                });
+              const x1 = await (
+                await rpc(`<?xml version="1.0"?><methodCall><methodName>LogIn</methodName><params><param><value><string></string></value></param><param><value><string></string></value></param><param><value><string>pt</string></value></param><param><value><string>VLSub 0.10.13</string></value></param></params></methodCall>`)
+              ).text();
+              const token = (/<name>token<\/name>\s*<value><string>([^<]*)</.exec(x1) || [])[1] || "";
+              if (token) {
+                const x2 = await (
+                  await rpc(`<?xml version="1.0"?><methodCall><methodName>DownloadSubtitles</methodName><params><param><value><string>${token}</string></value></param><param><value><array><data><value><string>${id}</string></value></data></array></value></param></params></methodCall>`)
+                ).text();
+                const b64 = (/<name>data<\/name>\s*<value><string>([A-Za-z0-9+/=]*)</.exec(x2) || [])[1] || "";
+                if (b64) {
+                  const bin = atob(b64);
+                  const bytes = new Uint8Array(bin.length);
+                  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                  return new Response(bytes, { status: 200, headers: { "content-type": "application/gzip" } });
+                }
+              }
+            }
+          } catch {}
+          // último recurso: download direto tentando passar pelo anti-bot
           let resp = await fetchMapeado(input, init);
           if (resp.status === 401) {
             try {
