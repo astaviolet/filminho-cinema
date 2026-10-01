@@ -140,11 +140,28 @@ if (dentroDoDiscord()) {
     const estreito = window.innerWidth < 700;
     const topo = estreito ? 52 : 0; // barra do Discord (mobile) fica por cima do app
     const st = document.createElement("style");
-    st.textContent =
-      `#root{padding-top:${topo}px}` +
-      `.screen-enter{will-change:transform;contain:paint}` +
-      `.bottom-nav-pill{will-change:transform}`;
+    st.textContent = `#root{padding-top:${topo}px}`;
     (document.head || document.documentElement).appendChild(st);
+
+    // Android/Webview: ao voltar do fundo (app flutuando, troca de app) as
+    // camadas compostas podem voltar vazias ("some da tela"). Reparo: repintura
+    // forçada + resize quando a Activity volta a ficar visível.
+    const repararTela = () => {
+      try {
+        window.dispatchEvent(new Event("resize"));
+        const r = document.getElementById("root");
+        if (!r) return;
+        const antes = r.style.display;
+        r.style.display = "none";
+        void r.offsetHeight; // reflow forçado recria as camadas
+        r.style.display = antes;
+      } catch {}
+    };
+    window.addEventListener("pageshow", () => setTimeout(repararTela, 60));
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) setTimeout(repararTela, 60);
+    });
+
     const reduzido = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     problemas.push(
       `[ambiente] motion-reduce=${reduzido} largura=${window.innerWidth} topo=${topo}px plataforma=${(location.search.match(/platform=([^&]+)/) || [])[1] || "?"}`
