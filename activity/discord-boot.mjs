@@ -148,7 +148,10 @@ if (dentroDoDiscord()) {
       `#root{padding-top:var(--filminho-topo);box-sizing:border-box}` +
       `#root>*{height:calc(100dvh - var(--filminho-topo))!important;min-height:calc(100dvh - var(--filminho-topo))!important}` +
       // deitado: o app usa a largura toda (o player ocupa a tela sem faixas)
-      `@media (orientation:landscape){[class*="max-w-[480px]"],[class*="max-w-[456px]"]{max-width:none!important}}`;
+      `@media (orientation:landscape){[class*="max-w-[480px]"],[class*="max-w-[456px]"]{max-width:none!important}` +
+      `:has(> [data-testid="player-area-video"])>[data-testid="player-area-video"]{position:absolute!important;inset:0!important}` +
+      `:has(> [data-testid="player-area-video"])>*:not([data-testid="player-area-video"]):not(script):not(style){position:absolute!important;left:0;right:0;z-index:3;background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,0))!important;padding-top:6px;padding-bottom:6px}` +
+      `:has(> [data-testid="player-area-video"])>*:last-child:not([data-testid="player-area-video"]){background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.8))!important}}`;
     (document.head || document.documentElement).appendChild(st);
 
     // Android/Webview: ao voltar do fundo (app flutuando, troca de app) as
@@ -178,6 +181,57 @@ if (dentroDoDiscord()) {
 
 // ── fontes inalcançáveis pelo proxy (jikan/tvmaze dão 520/504): respostas
 // vazias sintéticas — a busca segue com tmdb/itunes/omdb sem erro de console ──
+// ── dl.opensubtitles.org (legendas): o Anubis desafia o IP do proxy; o boot
+// resolve a prova de trabalho (SHA-256) no cliente e refaz o download ──
+async function sha256Hex(texto) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function resolverAnubis(html, urlOriginal) {
+  try {
+    const m = /<script id="anubis_challenge"[^>]*>([\s\S]*?)<\/script>/.exec(html);
+    if (!m) return false;
+    const dados = JSON.parse(m[1]);
+    const desafio = dados.challenge || dados;
+    const dificuldade = (desafio.difficulty ?? dados.rules?.difficulty ?? 4) | 0;
+    const alvo = "0".repeat(dificuldade);
+    const base = desafio.randomData || "";
+    const inicio = Date.now();
+    let hash = "";
+    let nonce = 0;
+    for (; nonce < 4000000; nonce++) {
+      hash = await sha256Hex(base + String(nonce));
+      if (hash.startsWith(alvo)) break;
+    }
+    if (!hash.startsWith(alvo)) return false;
+    const params = new URLSearchParams({
+      id: String(desafio.id || ""),
+      response: hash,
+      nonce: String(nonce),
+      redir: urlOriginal,
+      elapsedTime: String(Date.now() - inicio),
+    });
+    const r = await fetchOriginal(
+      "/legenda-dl/.within.website/x/cmd/anubis/api/pass-challenge?" + params.toString(),
+      { credentials: "include", redirect: "manual" }
+    );
+    try {
+      // cookies: o proxy pode não entregar Set-Cookie ao navegador — copia na mão
+      const sc = r.headers.get("set-cookie");
+      if (sc) {
+        for (const c of sc.split(/,(?=[^;=]+=)/)) {
+          const par = c.split(";")[0];
+          if (par.includes("=")) document.cookie = par;
+        }
+      }
+    } catch {}
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 try {
   const fetchMapeado = window.fetch.bind(window);
   window.fetch = function (input, init) {
@@ -188,6 +242,23 @@ try {
       }
       if (u.includes("api.tvmaze.com") || u.includes("/tvmaze/")) {
         return Promise.resolve(new Response("[]", { status: 200, headers: { "content-type": "application/json" } }));
+      }
+      if (u.includes("dl.opensubtitles.org") || u.includes("/legenda-dl/")) {
+        return (async () => {
+          let resp = await fetchMapeado(input, init);
+          if (resp.status === 401) {
+            try {
+              const texto = await resp.clone().text();
+              if (texto.includes("anubis_challenge")) {
+                const urlAbs = new URL(u, location.href).href;
+                if (await resolverAnubis(texto, urlAbs)) {
+                  resp = await fetchMapeado(input, init);
+                }
+              }
+            } catch {}
+          }
+          return resp;
+        })();
       }
     } catch {}
     return fetchMapeado(input, init);
