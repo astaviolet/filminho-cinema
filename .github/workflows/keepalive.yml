@@ -1,0 +1,23 @@
+name: keepalive
+
+# O GitHub desativa workflows agendados após 60 dias sem atividade no repositório.
+# Este job faz um commit vazio por mês para manter o bot 24/7 sempre ligado.
+on:
+  schedule:
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Commit vazio de keepalive
+        run: |
+          git config user.name "filminho-keepalive"
+          git config user.email "actions@users.noreply.github.com"
+          git commit --allow-empty -m "keepalive: mantém os workflows agendados ativos"
+          git push

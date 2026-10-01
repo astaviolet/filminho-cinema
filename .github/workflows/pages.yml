@@ -1,0 +1,49 @@
+name: deploy-activity-pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "filminho-ui.tar.gz.age"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar age
+        run: |
+          curl -sL https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz | tar -xz
+          sudo install -m 755 age/age /usr/local/bin/age
+
+      - name: Decifrar a UI do Filminho (nunca fica em texto aberto)
+        env:
+          AGE_PRIVATE_KEY: ${{ secrets.AGE_PRIVATE_KEY }}
+        run: |
+          mkdir -p "$HOME/.age"
+          printf '%s\n' "$AGE_PRIVATE_KEY" > "$HOME/.age/key.txt"
+          chmod 600 "$HOME/.age/key.txt"
+          mkdir site
+          age -d -i "$HOME/.age/key.txt" filminho-ui.tar.gz.age | tar -xzf - -C site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
