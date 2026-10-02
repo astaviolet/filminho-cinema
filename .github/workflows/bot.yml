@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - "bot.mjs"
+      - "streamer.mjs"
+      - "voz.mjs"
+      - "lib/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/bot.yml"
@@ -43,3 +46,4 @@ jobs:
           node bot.mjs
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
