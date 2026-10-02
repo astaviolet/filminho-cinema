@@ -276,6 +276,30 @@ try {
               }
             }
           } catch {}
+          // gambiarra: o bot baixa a legenda (rede normal) e devolve pela fila
+          // do Supabase — sem depender de porta nenhuma do portal.
+          try {
+            const idFila = (/(?:file|sub)\/(\d+)/.exec(u) || [])[1];
+            if (idFila) {
+              const chave = "sb_publishable_brpMhLujlw9YJUd2oUSZdw_uCGx3kRH";
+              const cab = { apikey: chave, Authorization: "Bearer " + chave, "content-type": "application/json" };
+              const alvo = "/supabase/rest/v1/filminho_legendas";
+              await fetchOriginal(alvo, {
+                method: "POST",
+                headers: cab,
+                body: JSON.stringify({ arquivo_id: Number(idFila), status: "pendente" }),
+              });
+              for (let i = 0; i < 15; i++) {
+                await new Promise((r) => setTimeout(r, 1000));
+                const rr = await fetchOriginal(alvo + "?arquivo_id=eq." + idFila + "&select=srt,status", { headers: cab });
+                const jj = await rr.json();
+                if (jj && jj[0] && jj[0].srt) {
+                  return new Response(jj[0].srt, { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
+                }
+                if (jj && jj[0] && jj[0].status === "falhou") break;
+              }
+            }
+          } catch {}
           // último recurso: download direto tentando passar pelo anti-bot
           let resp = await fetchMapeado(input, init);
           if (resp.status === 401) {
