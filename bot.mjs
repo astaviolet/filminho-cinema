@@ -53,22 +53,30 @@ client.on(Events.InteractionCreate, async (i) => {
       return;
     }
 
-    // 1) Caminho oficial: abrir a Activity direto do comando.
-    const r = await responder(i, { type: 12, data: {} });
-    if (r.ok) {
-      console.log("[filminho] LAUNCH_ACTIVITY aceito para", i.user.tag);
-      return;
-    }
-
-    // 2) Activity ainda não habilitada (ou outro erro): mensagem efêmera honesta.
-    const erro = await r.text();
-    console.log("[filminho] LAUNCH_ACTIVITY recusado:", r.status, erro);
+    // Filme rodando pelo link do Filminho — no celular o Discord abre no
+    // navegador embutido dele (sem sair do app); a voz fica na chamada.
     await responder(i, {
       type: 4,
       data: {
         content:
-          "🎬 O Filminho Cinema está quase pronto! Falta uma última ativação no painel do desenvolvedor — já estou avisando meu dono.",
-        flags: 64,
+          "🍿 **Cinema aberto!**\n\n" +
+          "1️⃣ Toquem em **🍿 Abrir o Filminho** (no celular, abre aqui dentro do Discord)\n" +
+          "2️⃣ Escolham o filme → **Assistir junto** → mandem o link da sala aqui no chat\n" +
+          "3️⃣ **No canal de voz** todo mundo junto — o filme sincroniza todo mundo\n\n" +
+          "_Quem abrir a sala controla o play._ 🎬",
+        components: [
+          {
+            type: 1,
+            components: [
+              {
+                type: 2,
+                style: 5,
+                label: "🍿 Abrir o Filminho",
+                url: "https://filminhoo.lovable.app",
+              },
+            ],
+          },
+        ],
       },
     });
   } catch (e) {
