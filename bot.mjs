@@ -53,17 +53,50 @@ client.on(Events.InteractionCreate, async (i) => {
       return;
     }
 
-    // Filme rodando pelo link do Filminho — no celular o Discord abre no
-    // navegador embutido dele (sem sair do app); a voz fica na chamada.
+    // Comando com filme: transmite DENTRO do Discord (canal de voz).
+    const filme = (i.options && i.options.getString && i.options.getString("filme")) || null;
+    const ano = (i.options && i.options.getInteger && i.options.getInteger("ano")) || null;
+    const canalVoz = i.member && i.member.voice && i.member.voice.channelId;
+    if (filme) {
+      if (!canalVoz) {
+        await responder(i, {
+          type: 4,
+          data: { content: "Entra no canal de voz primeiro — o filme transmite lá. 🍿", flags: 64 },
+        });
+        return;
+      }
+      await fetch(`${SUPA}/filminho_stream?id=eq.1`, {
+        method: "PATCH",
+        headers: supaCab,
+        body: JSON.stringify({
+          acao: "assistir",
+          busca: filme.slice(0, 120),
+          ano: ano ? String(ano) : null,
+          canal_id: canalVoz,
+          pos_s: 0,
+          pedido_em: new Date().toISOString(),
+          estado: "pedido",
+          mensagem: "",
+        }),
+      });
+      await responder(i, {
+        type: 4,
+        data: {
+          content: `🎬 **Preparando ${filme}** — a transmissão começa no canal de voz em instantes. Todo mundo no Discord!`,
+        },
+      });
+      return;
+    }
+
+    // Sem filme: instruções + link do Filminho (completo, com legendas).
     await responder(i, {
       type: 4,
       data: {
         content:
           "🍿 **Cinema aberto!**\n\n" +
-          "1️⃣ Toquem em **🍿 Abrir o Filminho** (no celular, abre aqui dentro do Discord)\n" +
-          "2️⃣ Escolham o filme → **Assistir junto** → mandem o link da sala aqui no chat\n" +
-          "3️⃣ **No canal de voz** todo mundo junto — o filme sincroniza todo mundo\n\n" +
-          "_Quem abrir a sala controla o play._ 🎬",
+          "**Dentro do Discord:** `/cinema filme:Nome do filme` — o filme transmite no canal de voz pra todo mundo.\n" +
+          "**Ou pelo app:** **🍿 Abrir o Filminho** (no celular, abre aqui dentro do Discord) → filme → **Assistir junto**.\n\n" +
+          "_Todo mundo no canal de voz pra conversar._ 🎬",
         components: [
           {
             type: 1,
@@ -141,3 +174,45 @@ setInterval(async () => {
     }
   } catch {}
 }, 4000);
+
+
+// ── /parar + avisos da transmissão no canal ─────────────────────────
+client.on(Events.InteractionCreate, async (i) => {
+  try {
+    if (!i.isChatInputCommand() || i.commandName !== "parar") return;
+    if (i.guildId !== GUILD_ID || i.channelId !== CANAL_AUTORIZADO) return;
+    await fetch(`${SUPA}/filminho_stream?id=eq.1`, {
+      method: "PATCH",
+      headers: supaCab,
+      body: JSON.stringify({ acao: "parar", pedido_em: new Date().toISOString() }),
+    });
+    await responder(i, { type: 4, data: { content: "⏹️ Transmissão parada." } });
+  } catch (e) {
+    console.error("[filminho] /parar:", e?.message || e);
+  }
+});
+
+let estadoVisto = "";
+setInterval(async () => {
+  try {
+    const r = await fetch(`${SUPA}/filminho_stream?id=eq.1&select=estado,mensagem`, { headers: supaCab });
+    const o = (await r.json())?.[0];
+    if (!o || !o.estado || o.estado === estadoVisto) return;
+    estadoVisto = o.estado;
+    const textos = {
+      preparando: `🎬 ${o.mensagem || "Preparando…"}`,
+      entrando: "📡 Transmissão começando — entrem no canal de voz e cliquem no vídeo!",
+      assistindo: "▶️ No ar! Cliquem na transmissão do canal de voz. 🍿",
+      fim: "🍿 Acabou! Valeu por assistir.",
+      erro: `😕 ${o.mensagem || "Deu ruim na transmissão."}`,
+    };
+    const msg = textos[o.estado];
+    if (msg) {
+      await fetch(`${API}/channels/${CANAL_AUTORIZADO}/messages`, {
+        method: "POST",
+        headers: { authorization: `Bot ${process.env.DISCORD_TOKEN}`, "content-type": "application/json" },
+        body: JSON.stringify({ content: msg }),
+      });
+    }
+  } catch {}
+}, 3000);

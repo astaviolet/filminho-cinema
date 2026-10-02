@@ -7,8 +7,10 @@
     "bot": "node --env-file=.env bot.mjs"
   },
   "dependencies": {
+    "@dank074/discord-video-stream": "^4.1.0",
     "@discord/embedded-app-sdk": "^2.5.0",
-    "discord.js": "^14.16.3"
+    "discord.js": "^14.16.3",
+    "discord.js-selfbot-v13": "^3.7.1"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"

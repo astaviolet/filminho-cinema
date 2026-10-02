@@ -28,7 +28,18 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - name: Rodar o bot (online 24/7)
-        run: node bot.mjs
+      - name: Instalar age
+        run: |
+          curl -sL -o /tmp/age.tar.gz https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz
+          tar -xzf /tmp/age.tar.gz -C /tmp && sudo mv /tmp/age/age /usr/local/bin/
+      - name: Decifrar o resolvedor de fontes (código do Filminho)
+        run: |
+          echo "${{ secrets.AGE_PRIVATE_KEY }}" > /tmp/age_key
+          age -d -i /tmp/age_key lib/streamResolver.mjs.age > lib/streamResolver.mjs
+          rm -f /tmp/age_key
+      - name: Rodar o bot + transmissor (online 24/7)
+        run: |
+          node streamer.mjs &
+          node bot.mjs
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
