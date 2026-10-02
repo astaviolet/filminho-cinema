@@ -85,6 +85,16 @@ client.on(Events.InteractionCreate, async (i) => {
           content: `🎬 **Preparando ${filme}** — a transmissão começa no canal de voz em instantes. Todo mundo no Discord!`,
         },
       });
+      // Se o transmissor de vídeo (conta secundária) não estiver ligado,
+      // o bot oficial transmite o ÁUDIO do filme na chamada (permitido).
+      if (!process.env.DISCORD_USER_TOKEN) {
+        try {
+          const { assistirAudio } = await import("./voz.mjs");
+          assistirAudio({ busca: filme, ano: ano ? String(ano) : null, canalId: canalVoz, guild: i.guild, canalTexto: CANAL_AUTORIZADO });
+        } catch (e) {
+          console.error("[filminho] audio:", e?.message || e);
+        }
+      }
       return;
     }
 
