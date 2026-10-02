@@ -45,11 +45,12 @@ let transmitindo = null; // { ffmpeg, cancelar }
 
 async function setEstado(estado, mensagem) {
   try {
-    await fetch(`${SUPA}/filminho_stream?id=eq.1`, {
-      method: "PATCH",
-      headers: supaCab,
-      body: JSON.stringify({ estado, mensagem: mensagem || "", atualizado_em: new Date().toISOString() }),
-    });
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(
+      "/tmp/filminho-status.json",
+      JSON.stringify({ estado, mensagem: mensagem || "", atualizado_em: new Date().toISOString() }),
+      "utf8",
+    );
   } catch {}
 }
 
@@ -144,9 +145,11 @@ async function assistir({ busca, ano, canalId, posS }) {
 let ultimo = "";
 async function ciclo() {
   try {
-    const r = await fetch(`${SUPA}/filminho_stream?id=eq.1&select=*`, { headers: supaCab });
-    const linhas = await r.json();
-    const o = linhas && linhas[0];
+    const { readFile } = await import("node:fs/promises");
+    let o = null;
+    try {
+      o = JSON.parse(await readFile("/tmp/filminho-ordem.json", "utf8"));
+    } catch {}
     if (!o) return;
     const chave = `${o.acao}|${o.busca}|${o.canal_id}|${o.pedido_em}`;
     if (o.acao && o.acao !== "ocioso" && chave !== ultimo) {

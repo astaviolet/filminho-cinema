@@ -65,20 +65,19 @@ client.on(Events.InteractionCreate, async (i) => {
         });
         return;
       }
-      await fetch(`${SUPA}/filminho_stream?id=eq.1`, {
-        method: "PATCH",
-        headers: supaCab,
-        body: JSON.stringify({
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(
+        "/tmp/filminho-ordem.json",
+        JSON.stringify({
           acao: "assistir",
           busca: filme.slice(0, 120),
           ano: ano ? String(ano) : null,
           canal_id: canalVoz,
           pos_s: 0,
           pedido_em: new Date().toISOString(),
-          estado: "pedido",
-          mensagem: "",
         }),
-      });
+        "utf8",
+      );
       await responder(i, {
         type: 4,
         data: {
@@ -191,11 +190,8 @@ client.on(Events.InteractionCreate, async (i) => {
   try {
     if (!i.isChatInputCommand() || i.commandName !== "parar") return;
     if (i.guildId !== GUILD_ID || i.channelId !== CANAL_AUTORIZADO) return;
-    await fetch(`${SUPA}/filminho_stream?id=eq.1`, {
-      method: "PATCH",
-      headers: supaCab,
-      body: JSON.stringify({ acao: "parar", pedido_em: new Date().toISOString() }),
-    });
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile("/tmp/filminho-ordem.json", JSON.stringify({ acao: "parar", pedido_em: new Date().toISOString() }), "utf8");
     await responder(i, { type: 4, data: { content: "⏹️ Transmissão parada." } });
   } catch (e) {
     console.error("[filminho] /parar:", e?.message || e);
@@ -205,8 +201,11 @@ client.on(Events.InteractionCreate, async (i) => {
 let estadoVisto = "";
 setInterval(async () => {
   try {
-    const r = await fetch(`${SUPA}/filminho_stream?id=eq.1&select=estado,mensagem`, { headers: supaCab });
-    const o = (await r.json())?.[0];
+    const { readFile } = await import("node:fs/promises");
+    let o = null;
+    try {
+      o = JSON.parse(await readFile("/tmp/filminho-status.json", "utf8"));
+    } catch {}
     if (!o || !o.estado || o.estado === estadoVisto) return;
     estadoVisto = o.estado;
     const textos = {
